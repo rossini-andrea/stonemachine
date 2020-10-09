@@ -8,107 +8,84 @@
 #include <boost/fusion/include/adapt_struct.hpp>
 #include <boost/spirit/include/support_line_pos_iterator.hpp>
 
+using namespace std::literals::string_literals;
+
 namespace spirit = boost::spirit;
+namespace ascii = boost::spirit::ascii;
 namespace qi = boost::spirit::qi;
 namespace phoenix = boost::phoenix;
 
-class ast_value;
-class ast_object;
-class ast_array;
+using str_iterator = std::string::iterator;
+using skipper = qi::space_type;
 
-using ast_variant = boost::variant<
-    boost::recursive_wrapper<ast_object>,
-    boost::recursive_wrapper<ast_array>,
-    std::string>;
-using ast_attributemap_t = std::map<std::string, ast_value>;
-using ast_value_t = std::vector<ast_value>;
-
-struct ast_value {
-   ast_variant value;
+struct scroll_statement {
+    std::string operator_name;
+    std::string expression;
+    std::string r1;
+    std::string r2;
+    std::string r3;
 };
 
-struct ast_object {
-    ast_attributemap_t attributes;
-};
+BOOST_FUSION_ADAPT_STRUCT(scroll_statement,
+    (std::string,   operator_name)
+    (std::string,   expression)
+    (std::string,   r1)
+    (std::string,   r2)
+    (std::string,   r3)
+)
 
-struct ast_array {
-    ast_value_t values;
-};
+struct scroll_grammar : qi::grammar<str_iterator,
+                                    scroll_statement()> {
+    scroll_grammar() : scroll_grammar::base_type(root) {
+        register_name = qi::char_('A', 'H');
+        expression = spirit::uint_(std::numeric_limits<uint32_t>::max());
+        ternary_operator = qi::lit("CondMove") | "Index" | "Amend" |
+                            "Add" | "Mult" | "Div" | "Nand";
+        binary_operator = qi::lit("Alloc") | "Abandon" | "Load";
+        unary_operator = qi::lit("Input") | "Output";
+        void_operator = qi::lit("Halt");
+        special_operator = qi::lit("Ortography");
+        data_operator = qi::lit("Data");
 
-BOOST_FUSION_ADAPT_STRUCT(ast_value, (ast_variant, value))
-BOOST_FUSION_ADAPT_STRUCT(ast_object, (ast_attributemap_t, attributes ))
-BOOST_FUSION_ADAPT_STRUCT(ast_array, (ast_value_t, values))
-
-using ast_pair_t = std::pair<std::string, ast_value>;
-
-template<typename IteratorT>
-class scroll_grammar : public qi::grammar<IteratorT, ast_object()> {
-public:
-    scroll_grammar() : scroll_grammar::base_type(root, "Object") {
-        register_name %= qi::char_('A', 'H');
-
-        conditional_move %= "CondMove" >> register_name >> ',' >>
-                                    register_name >> ',' >>
-                                    register_name;
-        index %= "Index" >> register_name >> ',' >>
-                                    register_name >> ',' >>
-                                    register_name;
-        amend %= "Amend" >> register_name >> ',' >>
-                                    register_name >> ',' >>
-                                    register_name;
-        add %= "Add" >> register_name >> ',' >>
-                                    register_name >> ',' >>
-                                    register_name;
-        mult %= "Mult" >> register_name >> ',' >>
-                                    register_name >> ',' >>
-                                    register_name;
-        div %= "Div" >> register_name >> ',' >>
-                                    register_name >> ',' >>
-                                    register_name;
-        nand %= "Nand" >> register_name >> ',' >>
-                                    register_name >> ',' >>
-                                    register_name;
-        halt %= "Halt";
-        alloc %= "Alloc" >> register_name >> ',' >> register_name;
-        abandon %= "Abandon" >> register_name;
-        output %= "Output" >> register_name;
-        input %= "Input" >> register_name;
-        load %= "Load" >> register_name >> ',' >> register_name;
-        expression %= spirit::uint_(std::numeric_limits<uint32_t>::max());
-        orthography %= "Ortography" >> register_name >> ',' >> expression;
-        data %= "Data" >> (expression >> *(',' >> expression));
-        oprator %= conditional_move | index | amend | add | mult | div | nand |
-                halt | alloc | abandon | output | input | load |
-                orthography;
-        root %= (oprator | data);
-
-        root.name("root");
-        register_name.name("register");
-        conditional_move.name("cond_move");
-        index.name("index");
-        amend.name("amend");
-        add.name("add");
-        mult.name("mult");
-        div.name("div");
-        nand.name("nand");
-        halt.name("halt");
-        alloc.name("alloc");
-        abandon.name("abandon");
-        output.name("output");
-        input.name("input");
-        load.name("load");
-        expression.name("expr");
-        orthography.name("ortho");
-        data.name("data");
-        oprator.name("operator");
+        root =
+            (
+                ternary_operator("operator_name"s) >>
+                register_name("r1"s) >> ',' >>
+                register_name("r2"s) >> ',' >>
+                register_name("r3"s)
+            ) |
+            (
+                binary_operator("operator_name"s) >>
+                register_name("r2"s) >> ',' >>
+                register_name("r3"s)
+            ) |
+            (
+                unary_operator("operator_name"s) >>
+                register_name("r3"s)
+            ) |
+            (
+                void_operator("operator_name"s)
+            ) |
+            (
+                special_operator("operator_name"s) >>
+                register_name("r1"s) >> ',' >>
+                expression("expression"s)
+            ) |
+            (
+                data_operator("operator_name"s) >> expression("expression"s)
+            );
     }
 
-    qi::rule<IteratorT> const& start() const { return root; }
-
-    qi::rule<IteratorT, ast_object()>
-        root, register_name, conditional_move, index, amend, add, mult, div,
-        nand, halt, alloc, abandon, output, input, load, expression,
-        orthography, data, oprator;
+private:
+    qi::rule<str_iterator, scroll_statement()>  root;
+    qi::rule<str_iterator, void(std::string)>   ternary_operator,
+                                                binary_operator,
+                                                unary_operator,
+                                                void_operator,
+                                                special_operator,
+                                                data_operator;
+    qi::rule<str_iterator, void(std::string)>   register_name;
+    qi::rule<str_iterator, void(std::string)>   expression;
 };
 
 /**
@@ -132,8 +109,8 @@ int main(int argc, char *argv[]) {
         std::string line;
         scroll >> line;
         auto iter = line.begin();
-        scroll_grammar<std::string::iterator> g;
-        ast_object parse_result;
+        scroll_grammar g;
+        scroll_statement parse_result;
         bool r = qi::parse(iter,
                         line.end(), g, parse_result);
 
