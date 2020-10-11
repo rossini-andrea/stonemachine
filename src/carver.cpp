@@ -7,6 +7,7 @@
 #include <boost/spirit/include/qi.hpp>
 #include <boost/spirit/include/qi_uint.hpp>
 #include <boost/fusion/include/adapt_struct.hpp>
+#include <boost/spirit/include/qi_lexeme.hpp>
 #include <boost/spirit/include/support_line_pos_iterator.hpp>
 
 using namespace std::literals::string_literals;
@@ -16,7 +17,7 @@ namespace ascii = boost::spirit::ascii;
 namespace qi = boost::spirit::qi;
 
 using str_iterator = std::string::iterator;
-using skipper = qi::ascii::space_type;
+using skipper = ascii::space_type;
 
 struct scroll_statement {
     std::string operator_name;
@@ -39,15 +40,25 @@ struct scroll_grammar : qi::grammar<str_iterator,
                                     skipper> {
 
     scroll_grammar() : scroll_grammar::base_type(root) {
-        register_name = qi::char_('A', 'H');
-        expression = qi::uint_;
-        ternary_operator = qi::lit("CondMove") | "Index" | "Amend" |
-                            "Add" | "Mult" | "Div" | "Nand";
-        binary_operator = qi::lit("Alloc") | "Abandon" | "Load";
-        unary_operator = qi::lit("Input") | "Output";
-        void_operator = qi::lit("Halt");
-        special_operator = qi::lit("Ortography");
-        data_operator = qi::lit("Data");
+        register_name = qi::string("A") | qi::string("B") |
+                        qi::string("C") | qi::string("D") |
+                        qi::string("E") | qi::string("F") |
+                        qi::string("G") | qi::string("H");
+        expression = qi::lexeme[ +qi::digit ];
+        ternary_operator =  qi::string("CondMove") |
+                            qi::string("Index") |
+                            qi::string("Amend") |
+                            qi::string("Add") |
+                            qi::string("Mult") |
+                            qi::string("Div") |
+                            qi::string("Nand");
+        binary_operator =   qi::string("Alloc") |
+                            qi::string("Abandon") |
+                            qi::string("Load");
+        unary_operator = qi::string("Input") | qi::string("Output");
+        void_operator = qi::string("Halt");
+        special_operator = qi::string("Ortography");
+        data_operator = qi::string("Data");
 
         root =
             (
@@ -80,14 +91,14 @@ struct scroll_grammar : qi::grammar<str_iterator,
 
 private:
     qi::rule<str_iterator, scroll_statement(), skipper>  root;
-    qi::rule<str_iterator, void(std::string)>   ternary_operator,
+    qi::rule<str_iterator, void(std::string), skipper>   ternary_operator,
                                                 binary_operator,
                                                 unary_operator,
                                                 void_operator,
                                                 special_operator,
                                                 data_operator;
-    qi::rule<str_iterator, void(std::string)>   register_name;
-    qi::rule<str_iterator, void(std::string)>   expression;
+    qi::rule<str_iterator, void(std::string), skipper>   register_name;
+    qi::rule<str_iterator, void(std::string), skipper>   expression;
 };
 
 /**
