@@ -1,7 +1,8 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
-#include <map>
+#include <functional>
+#include <cstdlib>
 #include <stdint.h>
 #include <boost/spirit/include/qi.hpp>
 #include <boost/spirit/include/qi_uint.hpp>
@@ -13,10 +14,9 @@ using namespace std::literals::string_literals;
 namespace spirit = boost::spirit;
 namespace ascii = boost::spirit::ascii;
 namespace qi = boost::spirit::qi;
-namespace phoenix = boost::phoenix;
 
 using str_iterator = std::string::iterator;
-using skipper = qi::space_type;
+using skipper = qi::ascii::space_type;
 
 struct scroll_statement {
     std::string operator_name;
@@ -35,10 +35,12 @@ BOOST_FUSION_ADAPT_STRUCT(scroll_statement,
 )
 
 struct scroll_grammar : qi::grammar<str_iterator,
-                                    scroll_statement()> {
+                                    scroll_statement(),
+                                    skipper> {
+
     scroll_grammar() : scroll_grammar::base_type(root) {
         register_name = qi::char_('A', 'H');
-        expression = spirit::uint_(std::numeric_limits<uint32_t>::max());
+        expression = qi::uint_;
         ternary_operator = qi::lit("CondMove") | "Index" | "Amend" |
                             "Add" | "Mult" | "Div" | "Nand";
         binary_operator = qi::lit("Alloc") | "Abandon" | "Load";
@@ -77,7 +79,7 @@ struct scroll_grammar : qi::grammar<str_iterator,
     }
 
 private:
-    qi::rule<str_iterator, scroll_statement()>  root;
+    qi::rule<str_iterator, scroll_statement(), skipper>  root;
     qi::rule<str_iterator, void(std::string)>   ternary_operator,
                                                 binary_operator,
                                                 unary_operator,
@@ -107,12 +109,12 @@ int main(int argc, char *argv[]) {
     while (!scroll.eof()) {
         ++line_num;
         std::string line;
-        scroll >> line;
+        std::getline(scroll, line);
         auto iter = line.begin();
         scroll_grammar g;
         scroll_statement parse_result;
-        bool r = qi::parse(iter,
-                        line.end(), g, parse_result);
+        bool r = qi::phrase_parse(iter,
+                        line.end(), g, qi::ascii::space, parse_result);
 
         if (!r) {
             std::cerr << "Error on line " << line_num << ".\n";
