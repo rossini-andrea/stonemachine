@@ -1,4 +1,4 @@
-Orthography A,15
+Orthography A, 'H'
 Output A
 Orthography A, 'e'
 Output A
@@ -24,6 +24,6 @@ Orthography A, 'd'
 Output A
 Orthography A, '!'
 Output A
-Orthography A, '\n'
+Orthography A, 10
 Output A
 Halt
