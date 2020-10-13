@@ -7,6 +7,7 @@
 #include <map>
 #include <vector>
 #include <variant>
+#include <optional>
 #include <functional>
 #include <boost/spirit/include/qi.hpp>
 #include <boost/spirit/include/qi_uint.hpp>
@@ -57,7 +58,7 @@ BOOST_FUSION_ADAPT_STRUCT(scroll_statement,
  * @brief The Boost::Spirit grammar to parse th Universal machine assembly.
  */
 struct scroll_grammar : qi::grammar<str_iterator,
-                                    scroll_statement(),
+                                    std::optional<scroll_statement>(),
                                     skipper> {
 
     scroll_grammar() : scroll_grammar::base_type(root) {
@@ -79,11 +80,13 @@ struct scroll_grammar : qi::grammar<str_iterator,
                         qi::string("Halt") |
                         qi::string("Orthography") |
                         qi::string("Data");
-        root = operator_name >> -(parameter % ',') >> (qi::eoi | qi::eol);
+        statement = operator_name >> -(parameter % ',');
+        root = -statement >> (qi::eoi | qi::eol);
     }
 
 private:
-    qi::rule<str_iterator, scroll_statement(), skipper> root;
+    qi::rule<str_iterator, std::optional<scroll_statement>(), skipper> root;
+    qi::rule<str_iterator, scroll_statement(), skipper> statement;
     qi::rule<str_iterator, std::string()>               operator_name;
     qi::rule<str_iterator, params_variant()>            parameter;
     qi::rule<str_iterator, register_name()>             register_name;
@@ -254,20 +257,24 @@ int main(int argc, char *argv[]) {
         std::getline(scroll, line);
         auto iter = line.begin();
         scroll_grammar g;
-        scroll_statement parse_result;
+        std::optional<scroll_statement> parse_result;
         bool r = qi::phrase_parse(iter, line.end(), g,
                                     qi::ascii::space, parse_result);
 
         if (!r) {
             std::cerr << "Error on line " << line_num << ".\n";
             stone.close();
-            //std::filesystem::remove(argv[2]);
+            std::filesystem::remove(argv[2]);
             return -1;
+        }
+
+        if (!parse_result) {
+            continue;
         }
 
         uint32_t opcode;
 
-        if (!compiler.compile(parse_result, opcode)) {
+        if (!compiler.compile(*parse_result, opcode)) {
             std::cerr << "Error on line " << line_num << ".\n";
             stone.close();
             std::filesystem::remove(argv[2]);
