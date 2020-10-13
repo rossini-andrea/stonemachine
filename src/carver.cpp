@@ -107,7 +107,8 @@ struct stone_compiler {
         {"Output",      [](auto &a, auto &b){return stone_compiler::ennary_op<1>(10, a, b);}},
         {"Input",       [](auto &a, auto &b){return stone_compiler::ennary_op<1>(11, a, b);}},
         {"Load",        [](auto &a, auto &b){return stone_compiler::ennary_op<2>(12, a, b);}},
-        {"Orthography", [](auto &a, auto &b){return stone_compiler::ortho_op(13, a, b);}}
+        {"Orthography", [](auto &a, auto &b){return stone_compiler::ortho_op(13, a, b);}},
+        {"Data",        [](auto &a, auto &b){return stone_compiler::data(a, b);}}
     }
     {
 
@@ -124,6 +125,22 @@ struct stone_compiler {
 private:
     std::map<std::string, operator_compiler> compilers;
 
+    static bool data(const scroll_statement &statement, uint32_t &opcode) {
+        if (statement.params.size() != 1) {
+            return false;
+        }
+
+        try {
+            const expression &expr = std::get<expression>(statement.params[0]);
+            opcode = expr.val;
+        }
+        catch (std::bad_variant_access&) {
+            return false;
+        }
+
+        return true;
+    }
+
     static bool void_op(uint32_t op, const scroll_statement &statement, uint32_t &opcode) {
         if (statement.params.size() > 0) {
             return false;
@@ -139,20 +156,19 @@ private:
             return false;
         }
 
-        uint32_t result = 0;
+        uint32_t registers = 0;
 
         for (auto &p: statement.params) {
             try {
-                const register_name &r = std::get<register_name>(statement.params[0]);
-                result = (result << 3) | r.get();
+                const register_name &r = std::get<register_name>(p);
+                registers = (registers << 3) | r.get();
             }
             catch (std::bad_variant_access&) {
                 return false;
             }
-
         }
 
-        opcode = (op << 28) | result;
+        opcode = (op << 28) | registers;
         return true;
     }
 

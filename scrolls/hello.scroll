@@ -1,29 +1,28 @@
-Orthography A, 'H'
+Orthography B, 0
+Orthography C, 13
+Orthography D, 1
+Orthography E, 5
+Orthography H, 9
+Index A, B, C
+Orthography G, 12
+CondMove G, H, A
+Load B, G
 Output A
-Orthography A, 'e'
-Output A
-Orthography A, 'l'
-Output A
-Orthography A, 'l'
-Output A
-Orthography A, 'o'
-Output A
-Orthography A, ','
-Output A
-Orthography A, ' '
-Output A
-Orthography A, 'W'
-Output A
-Orthography A, 'o'
-Output A
-Orthography A, 'r'
-Output A
-Orthography A, 'l'
-Output A
-Orthography A, 'd'
-Output A
-Orthography A, '!'
-Output A
-Orthography A, 10
-Output A
+Add C, C, D
+Load B, E
 Halt
+Data 'H'
+Data 'e'
+Data 'l'
+Data 'l'
+Data 'o'
+Data ','
+Data ' '
+Data 'W'
+Data 'o'
+Data 'r'
+Data 'l'
+Data 'd'
+Data '!'
+Data 10
+Data 0

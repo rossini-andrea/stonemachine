@@ -181,7 +181,7 @@ public:
 
 }
 
-stonemachine::platter read_platter(std::fstream &stream);
+stonemachine::platter read_platter(std::istream &stream);
 
 /**
  * @brief Application entry point.
@@ -224,16 +224,19 @@ int main(int argc, char *argv[]) {
  * @param stream File stream to read.
  * @return The 32-bit platter found on the stream. Undefined if EOF.
  */
-stonemachine::platter read_platter(std::fstream &stream) {
-    stonemachine::platter platter;
+stonemachine::platter read_platter(std::istream &stream) {
+    uint8_t bytes[4];
+    std::streamsize read = 0;
 
-    for (int i = 0; i < 4; ++i) {
-        char byte;
+    while (read != 4) {
+        stream.read(reinterpret_cast<char*>(bytes + read), 4 - read);
+        read += stream.gcount();
 
-        if (stream.get(byte).eof()) return 0;
-
-        platter = (platter << 8) | byte;
+        if (stream.eof()) return 0;
     }
 
-    return platter;
+    return  (bytes[0] << 24) |
+            (bytes[1] << 16) |
+            (bytes[2] << 8) |
+            (bytes[3]);
 }
