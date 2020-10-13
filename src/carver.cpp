@@ -53,6 +53,9 @@ BOOST_FUSION_ADAPT_STRUCT(scroll_statement,
     (params_vector, params)
 )
 
+/**
+ * @brief The Boost::Spirit grammar to parse th Universal machine assembly.
+ */
 struct scroll_grammar : qi::grammar<str_iterator,
                                     scroll_statement(),
                                     skipper> {
@@ -125,6 +128,13 @@ struct stone_compiler {
 private:
     std::map<std::string, operator_compiler> compilers;
 
+    /**
+     * @brief Compiles the Data statement.
+     * @remarks The method carves on the output platter the exact content of the
+     *          one and only expression present in the statement.
+     * @param statement Reference to input statement.
+     * @param opcode Reference to output platter.
+     */
     static bool data(const scroll_statement &statement, uint32_t &opcode) {
         if (statement.params.size() != 1) {
             return false;
@@ -141,6 +151,14 @@ private:
         return true;
     }
 
+    /**
+     * @brief Compiles a void statement.
+     * @remarks The method carves on the output platter only the opcode of the
+     *          statement.
+     * @param op Numeric opcode.
+     * @param statement Reference to input statement.
+     * @param opcode Reference to output platter.
+     */
     static bool void_op(uint32_t op, const scroll_statement &statement, uint32_t &opcode) {
         if (statement.params.size() > 0) {
             return false;
@@ -150,6 +168,15 @@ private:
         return true;
     }
 
+    /**
+     * @brief Compiles an N-ary statement.
+     * @remarks The method carves on the output platter the opcode of the
+     *          statement, followed by the N registers.
+     * @tparam N Numer of expected parameters in the statement.
+     * @param op Numeric opcode.
+     * @param statement Reference to input statement.
+     * @param opcode Reference to output platter.
+     */
     template<size_t N>
     static bool ennary_op(uint32_t op, const scroll_statement &statement, uint32_t &opcode) {
         if (statement.params.size() != N) {
@@ -172,6 +199,15 @@ private:
         return true;
     }
 
+    /**
+     * @brief Compiles the Orthography statement.
+     * @remarks The method carves on the output platter the opcode of the
+     *          statement, followed by the destination register and the data
+     *          expression.
+     * @param op Numeric opcode.
+     * @param statement Reference to input statement.
+     * @param opcode Reference to output platter.
+     */
     static bool ortho_op(uint32_t op, const scroll_statement &statement, uint32_t &opcode) {
         if (statement.params.size() != 2) {
             return false;
