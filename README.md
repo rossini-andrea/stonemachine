@@ -72,6 +72,42 @@ Hello, World!
 
 Press CTRL+C to stop the process.
 
+## Assembly language scrolls quick reference
+
+To code for the stone machine, you don't need to manually carve binary digits on
+sandstone platters. You can write text on paper scrolls, and the carver will do
+the hard work for you.
+
+The scrolls, saved as `.scroll` files are composed of multiple lines of single
+instructions obeying the syntax:
+
+```
+Operation Param, Param, ...
+```
+
+A Param can be either a register name ranging from A to H, a numerical unsigned
+expression, or a single-quoted character.
+
+The available operations are:
+
+```
+CondMove    register-name, register-name, register-name
+Index       register-name, register-name, register-name
+Amend       register-name, register-name, register-name
+Add         register-name, register-name, register-name
+Mult        register-name, register-name, register-name
+Div         register-name, register-name, register-name
+Nand        register-name, register-name, register-name
+Halt
+Alloc       register-name, register-name
+Abandon     register-name
+Output      register-name
+Input       register-name
+Load        register-name, register-name
+Orthography register-name, expression
+Data        expression
+```
+
 ## Notes
 
 This project has been a warm up for more interesting retro CPU emulation
