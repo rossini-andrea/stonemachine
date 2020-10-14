@@ -1,3 +1,4 @@
 .vscode
 build*
 scrolls/*.bin
+scrolls/*.um*
