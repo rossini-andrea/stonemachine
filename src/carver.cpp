@@ -7,6 +7,7 @@
 #include <map>
 #include <vector>
 #include <variant>
+#include <type_traits>
 #include <optional>
 #include <functional>
 #include <boost/spirit/include/qi.hpp>
@@ -33,12 +34,18 @@ struct expression {
     uint32_t val;
 };
 
-using params_variant = std::variant<register_name, expression>;
+struct scroll_label {
+    std::string name;
+};
+
+using params_variant = std::variant<register_name, expression, scroll_label>;
 using params_vector = std::vector<params_variant>;
 
 struct scroll_statement {
     std::string operator_name;
     params_vector params;
+    uint32_t line;
+    std::optional<uint32_t> address;
 };
 
 BOOST_FUSION_ADAPT_STRUCT(register_name,
@@ -54,17 +61,25 @@ BOOST_FUSION_ADAPT_STRUCT(scroll_statement,
     (params_vector, params)
 )
 
+BOOST_FUSION_ADAPT_STRUCT(scroll_label,
+    (std::string, name)
+)
+
+using grammar_output_t = std::optional<std::variant<
+            scroll_statement,
+            scroll_label
+        >>;
+
 /**
  * @brief The Boost::Spirit grammar to parse th Universal machine assembly.
  */
-struct scroll_grammar : qi::grammar<str_iterator,
-                                    std::optional<scroll_statement>(),
-                                    skipper> {
+struct scroll_grammar : qi::grammar<str_iterator, grammar_output_t(), skipper> {
 
     scroll_grammar() : scroll_grammar::base_type(root) {
         register_name = qi::char_('A', 'H');
         expression = qi::uint_ | ('\'' >> qi::char_ >> '\'');
-        parameter = expression | register_name;
+        label = qi::lit(':') >> qi::lexeme[qi::char_];
+        parameter = expression | register_name | label;
         operator_name = qi::string("CondMove") |
                         qi::string("Index") |
                         qi::string("Amend") |
@@ -81,12 +96,13 @@ struct scroll_grammar : qi::grammar<str_iterator,
                         qi::string("Orthography") |
                         qi::string("Data");
         statement = operator_name >> -(parameter % ',');
-        root = -statement >> (qi::eoi | qi::eol);
+        root = -(statement | label) >> (qi::eoi | qi::eol);
     }
 
 private:
-    qi::rule<str_iterator, std::optional<scroll_statement>(), skipper> root;
+    qi::rule<str_iterator, grammar_output_t(), skipper> root;
     qi::rule<str_iterator, scroll_statement(), skipper> statement;
+    qi::rule<str_iterator, scroll_label()>              label;
     qi::rule<str_iterator, std::string()>               operator_name;
     qi::rule<str_iterator, params_variant()>            parameter;
     qi::rule<str_iterator, register_name()>             register_name;
@@ -235,6 +251,14 @@ private:
 };
 
 /**
+ * @brief Parsed program with symbol references.
+ */
+struct object_file {
+    std::vector<scroll_statement>   instructions;
+    std::map<std::string, uint32_t> labelmap;
+};
+
+/**
  * @brief Application entry point.
  * @param argc Command line arguments count.
  * @param argv Command line arguments.
@@ -246,10 +270,9 @@ int main(int argc, char *argv[]) {
     }
 
     std::fstream scroll(argv[1], std::ios_base::in);
-    std::fstream stone(argv[2], std::ios_base::out | std::ios_base::binary);
 
     int line_num = 0;
-    stone_compiler compiler;
+    object_file object;
 
     while (!scroll.eof()) {
         ++line_num;
@@ -257,14 +280,12 @@ int main(int argc, char *argv[]) {
         std::getline(scroll, line);
         auto iter = line.begin();
         scroll_grammar g;
-        std::optional<scroll_statement> parse_result;
+        grammar_output_t parse_result;
         bool r = qi::phrase_parse(iter, line.end(), g,
                                     qi::ascii::space, parse_result);
 
         if (!r) {
             std::cerr << "Error on line " << line_num << ".\n";
-            stone.close();
-            std::filesystem::remove(argv[2]);
             return -1;
         }
 
@@ -272,9 +293,27 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
+        std::visit([&object, line_num](auto &&arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, scroll_statement>) {
+                arg.line = line_num;
+                object.instructions.push_back(arg);
+            } else if constexpr (std::is_same_v<T, scroll_label>) {
+                object.labelmap[arg.name] = object.instructions.size();
+            }
+        }, *parse_result);
+    }
+
+    scroll.close();
+
+    stone_compiler compiler;
+    std::fstream stone(argv[2], std::ios_base::out | std::ios_base::binary);
+
+    for (auto &statement: object.instructions)
+    {
         uint32_t opcode;
 
-        if (!compiler.compile(*parse_result, opcode)) {
+        if (!compiler.compile(statement, opcode)) {
             std::cerr << "Error on line " << line_num << ".\n";
             stone.close();
             std::filesystem::remove(argv[2]);
