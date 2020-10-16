@@ -30,15 +30,17 @@ struct register_name {
     uint32_t get() const { return val - 'A'; }
 };
 
-struct expression {
-    uint32_t val;
-};
-
 struct scroll_label {
     std::string name;
 };
 
-using params_variant = std::variant<register_name, expression, scroll_label>;
+using expression_variant = std::variant<uint32_t, scroll_label>;
+
+struct expression {
+    expression_variant val;
+};
+
+using params_variant = std::variant<register_name, expression>;
 using params_vector = std::vector<params_variant>;
 
 struct scroll_statement {
@@ -53,7 +55,7 @@ BOOST_FUSION_ADAPT_STRUCT(register_name,
 )
 
 BOOST_FUSION_ADAPT_STRUCT(expression,
-    (uint32_t,   val)
+    (expression_variant,   val)
 )
 
 BOOST_FUSION_ADAPT_STRUCT(scroll_statement,
@@ -77,9 +79,9 @@ struct scroll_grammar : qi::grammar<str_iterator, grammar_output_t(), skipper> {
 
     scroll_grammar() : scroll_grammar::base_type(root) {
         register_name = qi::char_('A', 'H');
-        expression = qi::uint_ | ('\'' >> qi::char_ >> '\'');
         label = qi::lit(':') >> qi::lexeme[qi::char_];
-        parameter = expression | register_name | label;
+        expression = qi::uint_ | ('\'' >> qi::char_ >> '\'') | label;
+        parameter = expression | register_name;
         operator_name = qi::string("CondMove") |
                         qi::string("Index") |
                         qi::string("Amend") |
@@ -161,7 +163,7 @@ private:
 
         try {
             const expression &expr = std::get<expression>(statement.params[0]);
-            opcode = expr.val;
+            opcode = std::get<uint32_t>(expr.val);
         }
         catch (std::bad_variant_access&) {
             return false;
@@ -235,12 +237,13 @@ private:
         try {
             const register_name &r = std::get<register_name>(statement.params[0]);
             const expression &expr = std::get<expression>(statement.params[1]);
+            auto val = std::get<uint32_t>(expr.val);
 
-            if (expr.val & 0xe0000000) {
+            if (val & 0xe0000000) {
                 return false;
             }
 
-            opcode = (op << 28) | (r.get() << 25) | expr.val;
+            opcode = (op << 28) | (r.get() << 25) | val;
         }
         catch (std::bad_variant_access&) {
             return false;
