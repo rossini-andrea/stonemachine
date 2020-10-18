@@ -79,7 +79,7 @@ struct scroll_grammar : qi::grammar<str_iterator, grammar_output_t(), skipper> {
 
     scroll_grammar() : scroll_grammar::base_type(root) {
         register_name = qi::char_('A', 'H');
-        label = qi::lit(':') >> qi::lexeme[qi::char_];
+        label = qi::lexeme[qi::char_("_a-zA-Z") >> +qi::char_("_a-zA-Z0-9")] >> qi::lit(':');
         expression = qi::uint_ | ('\'' >> qi::char_ >> '\'') | label;
         parameter = expression | register_name;
         operator_name = qi::string("CondMove") |

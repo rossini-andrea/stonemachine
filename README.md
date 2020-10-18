@@ -85,8 +85,25 @@ instructions obeying the syntax:
 Operation Param, Param, ...
 ```
 
+### Labels
+
+Code can be labeled for easy reference in expressions. Just put a line with the
+label name in the syntax:
+
+```
+label_name:
+```
+
+The colon needs to be used also when referencing the label. This is a
+shortcoming I am planning to remove.
+
+### Params
+
 A Param can be either a register name ranging from A to H, a numerical unsigned
-expression, or a single-quoted character.
+expression, or a single-quoted character. Moreover an expression can be a label
+reference.
+
+### Operations
 
 The available operations are:
 
@@ -110,7 +127,7 @@ Data        expression
 
 ## Notes
 
-This project has been a warm up for more interesting retro CPU emulation
+This project is a warm up for more interesting retro CPU emulation
 projects. While I where at it, I decided to learn Boost::Spirit from scratch.
 
 If you wish, you can try the benchmarks available at
