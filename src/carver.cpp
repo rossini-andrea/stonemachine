@@ -112,27 +112,35 @@ private:
 };
 
 /**
+ * @brief Parsed program with symbol references.
+ */
+struct object_file {
+    std::vector<scroll_statement>   instructions;
+    std::map<std::string, uint32_t> labelmap;
+};
+
+/**
  * @brief Offers method for carving statements to stone.
  */
 struct stone_compiler {
     using operator_compiler = std::function<bool(const scroll_statement &, uint32_t &)>;
 
-    stone_compiler() : compilers {
-        {"CondMove",    [](auto &a, auto &b){return stone_compiler::ennary_op<3>(0, a, b);}},
-        {"Index",       [](auto &a, auto &b){return stone_compiler::ennary_op<3>(1, a, b);}},
-        {"Amend",       [](auto &a, auto &b){return stone_compiler::ennary_op<3>(2, a, b);}},
-        {"Add",         [](auto &a, auto &b){return stone_compiler::ennary_op<3>(3, a, b);}},
-        {"Mult",        [](auto &a, auto &b){return stone_compiler::ennary_op<3>(4, a, b);}},
-        {"Div",         [](auto &a, auto &b){return stone_compiler::ennary_op<3>(5, a, b);}},
-        {"Nand",        [](auto &a, auto &b){return stone_compiler::ennary_op<3>(6, a, b);}},
-        {"Halt",        [](auto &a, auto &b){return stone_compiler::void_op(7, a, b);}},
-        {"Alloc",       [](auto &a, auto &b){return stone_compiler::ennary_op<2>(8, a, b);}},
-        {"Abandon",     [](auto &a, auto &b){return stone_compiler::ennary_op<1>(9, a, b);}},
-        {"Output",      [](auto &a, auto &b){return stone_compiler::ennary_op<1>(10, a, b);}},
-        {"Input",       [](auto &a, auto &b){return stone_compiler::ennary_op<1>(11, a, b);}},
-        {"Load",        [](auto &a, auto &b){return stone_compiler::ennary_op<2>(12, a, b);}},
-        {"Orthography", [](auto &a, auto &b){return stone_compiler::ortho_op(13, a, b);}},
-        {"Data",        [](auto &a, auto &b){return stone_compiler::data(a, b);}}
+    stone_compiler(object_file &input_object) : object(input_object), compilers {
+        {"CondMove",    [this](auto &a, auto &b){return stone_compiler::ennary_op<3>(0, a, b);}},
+        {"Index",       [this](auto &a, auto &b){return stone_compiler::ennary_op<3>(1, a, b);}},
+        {"Amend",       [this](auto &a, auto &b){return stone_compiler::ennary_op<3>(2, a, b);}},
+        {"Add",         [this](auto &a, auto &b){return stone_compiler::ennary_op<3>(3, a, b);}},
+        {"Mult",        [this](auto &a, auto &b){return stone_compiler::ennary_op<3>(4, a, b);}},
+        {"Div",         [this](auto &a, auto &b){return stone_compiler::ennary_op<3>(5, a, b);}},
+        {"Nand",        [this](auto &a, auto &b){return stone_compiler::ennary_op<3>(6, a, b);}},
+        {"Halt",        [this](auto &a, auto &b){return stone_compiler::void_op(7, a, b);}},
+        {"Alloc",       [this](auto &a, auto &b){return stone_compiler::ennary_op<2>(8, a, b);}},
+        {"Abandon",     [this](auto &a, auto &b){return stone_compiler::ennary_op<1>(9, a, b);}},
+        {"Output",      [this](auto &a, auto &b){return stone_compiler::ennary_op<1>(10, a, b);}},
+        {"Input",       [this](auto &a, auto &b){return stone_compiler::ennary_op<1>(11, a, b);}},
+        {"Load",        [this](auto &a, auto &b){return stone_compiler::ennary_op<2>(12, a, b);}},
+        {"Orthography", [this](auto &a, auto &b){return stone_compiler::ortho_op(13, a, b);}},
+        {"Data",        [this](auto &a, auto &b){return stone_compiler::data(a, b);}}
     }
     {
 
@@ -146,8 +154,53 @@ struct stone_compiler {
     bool compile(const scroll_statement &statement, uint32_t &opcode) const {
         return compilers.at(statement.operator_name)(statement, opcode);
     }
+
+    /**
+     * @brief Compiles the program.
+     */
+    bool compile(std::ostream &file) const {
+        for (auto &statement: object.instructions)
+        {
+            uint32_t opcode;
+
+            if (!compile(statement, opcode)) {
+                return false;
+            }
+
+            uint8_t bytes[4] = {
+                static_cast<uint8_t>((opcode >> 24) & 0xff),
+                static_cast<uint8_t>((opcode >> 16) & 0xff),
+                static_cast<uint8_t>((opcode >> 8) & 0xff),
+                static_cast<uint8_t>((opcode) & 0xff)
+            };
+            file.write(reinterpret_cast<char*>(bytes), sizeof(bytes));
+        }
+
+        return true;
+    }
 private:
+    object_file &object;
     std::map<std::string, operator_compiler> compilers;
+
+    bool resolve_expression(const expression &expr, uint32_t &value) {
+        return std::visit([&value, this](auto &&expr) -> bool {
+            using T = std::decay_t<decltype(expr)>;
+            if constexpr (std::is_same_v<T, uint32_t>) {
+                value = expr;
+            } else if constexpr (std::is_same_v<T, scroll_label>) {
+                value = 0;
+                auto it = object.labelmap.find(expr.name);
+
+                if (it == object.labelmap.end()) {
+                    return false;
+                }
+
+                value = object.instructions[it->second].address.value();
+            }
+
+            return true;
+        }, expr.val);
+    }
 
     /**
      * @brief Compiles the Data statement.
@@ -156,14 +209,17 @@ private:
      * @param statement Reference to input statement.
      * @param opcode Reference to output platter.
      */
-    static bool data(const scroll_statement &statement, uint32_t &opcode) {
+    bool data(const scroll_statement &statement, uint32_t &opcode) {
         if (statement.params.size() != 1) {
             return false;
         }
 
         try {
             const expression &expr = std::get<expression>(statement.params[0]);
-            opcode = std::get<uint32_t>(expr.val);
+
+            if (!resolve_expression(expr, opcode)) {
+                return false;
+            }
         }
         catch (std::bad_variant_access&) {
             return false;
@@ -180,7 +236,7 @@ private:
      * @param statement Reference to input statement.
      * @param opcode Reference to output platter.
      */
-    static bool void_op(uint32_t op, const scroll_statement &statement, uint32_t &opcode) {
+    bool void_op(uint32_t op, const scroll_statement &statement, uint32_t &opcode) {
         if (statement.params.size() > 0) {
             return false;
         }
@@ -199,7 +255,7 @@ private:
      * @param opcode Reference to output platter.
      */
     template<size_t N>
-    static bool ennary_op(uint32_t op, const scroll_statement &statement, uint32_t &opcode) {
+    bool ennary_op(uint32_t op, const scroll_statement &statement, uint32_t &opcode) {
         if (statement.params.size() != N) {
             return false;
         }
@@ -229,7 +285,7 @@ private:
      * @param statement Reference to input statement.
      * @param opcode Reference to output platter.
      */
-    static bool ortho_op(uint32_t op, const scroll_statement &statement, uint32_t &opcode) {
+    bool ortho_op(uint32_t op, const scroll_statement &statement, uint32_t &opcode) {
         if (statement.params.size() != 2) {
             return false;
         }
@@ -237,7 +293,11 @@ private:
         try {
             const register_name &r = std::get<register_name>(statement.params[0]);
             const expression &expr = std::get<expression>(statement.params[1]);
-            auto val = std::get<uint32_t>(expr.val);
+            uint32_t val;
+
+            if (!resolve_expression(expr, val)) {
+                return false;
+            }
 
             if (val & 0xe0000000) {
                 return false;
@@ -254,14 +314,6 @@ private:
 };
 
 /**
- * @brief Parsed program with symbol references.
- */
-struct object_file {
-    std::vector<scroll_statement>   instructions;
-    std::map<std::string, uint32_t> labelmap;
-};
-
-/**
  * @brief Application entry point.
  * @param argc Command line arguments count.
  * @param argv Command line arguments.
@@ -274,7 +326,8 @@ int main(int argc, char *argv[]) {
 
     std::fstream scroll(argv[1], std::ios_base::in);
 
-    int line_num = 0;
+    uint32_t line_num = 0;
+    uint32_t address = 0;
     object_file object;
 
     while (!scroll.eof()) {
@@ -296,10 +349,12 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        std::visit([&object, line_num](auto &&arg) {
+        std::visit([&object, line_num, &address](auto &&arg) {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, scroll_statement>) {
                 arg.line = line_num;
+                arg.address = address;
+                ++address;
                 object.instructions.push_back(arg);
             } else if constexpr (std::is_same_v<T, scroll_label>) {
                 object.labelmap[arg.name] = object.instructions.size();
@@ -309,26 +364,14 @@ int main(int argc, char *argv[]) {
 
     scroll.close();
 
-    stone_compiler compiler;
+    stone_compiler compiler(object);
     std::fstream stone(argv[2], std::ios_base::out | std::ios_base::binary);
 
-    for (auto &statement: object.instructions)
-    {
-        uint32_t opcode;
-
-        if (!compiler.compile(statement, opcode)) {
-            std::cerr << "Error on line " << line_num << ".\n";
-            stone.close();
-            std::filesystem::remove(argv[2]);
-            return -1;
-        }
-
-        uint8_t bytes[4] = {
-            static_cast<uint8_t>((opcode >> 24) & 0xff),
-            static_cast<uint8_t>((opcode >> 16) & 0xff),
-            static_cast<uint8_t>((opcode >> 8) & 0xff),
-            static_cast<uint8_t>((opcode) & 0xff)
-        };
-        stone.write(reinterpret_cast<char*>(bytes), sizeof(bytes));
+    if (!compiler.compile(stone)) {
+        //std::cerr << "Error on line " << line_num << ".\n";
+        std::cerr << "Error - Sorry for the missing line, I will restore soon.\n";
+        stone.close();
+        std::filesystem::remove(argv[2]);
+        return -1;
     }
 }
